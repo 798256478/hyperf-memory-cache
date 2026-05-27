@@ -1,0 +1,10 @@
+/vendor/
+/composer.lock
+/.phpunit.result.cache
+/phpstan.neon
+/.idea/
+/.vscode/
+*.swp
+*.swo
+.DS_Store
+.php-cs-fixer.cache
