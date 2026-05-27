@@ -17,6 +17,8 @@ final class MemoryCacheManager
 
     private readonly int $ttlJitter;
 
+    private readonly int $maxKeyLength;
+
     public function __construct(
         private readonly LocalCacheTableInterface $table,
         private readonly CacheValueSerializerInterface $serializer,
@@ -27,6 +29,7 @@ final class MemoryCacheManager
     ) {
         $this->defaultTtl = max(1, (int) $config->get('memory_cache.default_ttl', 60));
         $this->ttlJitter = max(0, (int) $config->get('memory_cache.ttl_jitter', 5));
+        $this->maxKeyLength = max(16, (int) $config->get('memory_cache.max_key_length', 60));
         $this->logger = $loggerFactory->get('cache.memory');
     }
 
@@ -35,6 +38,7 @@ final class MemoryCacheManager
      */
     public function get(string $key): array
     {
+        $key = $this->shortenKey($key);
         $row = $this->table->get($key);
         if ($row === null || $row['expire_at'] <= time()) {
             $this->metrics->recordMiss();
@@ -61,6 +65,7 @@ final class MemoryCacheManager
 
     public function set(string $key, mixed $value, int $ttl, bool $jitter = true): void
     {
+        $key = $this->shortenKey($key);
         $effectiveTtl = max(1, $ttl);
         if ($jitter && $this->ttlJitter > 0) {
             $effectiveTtl += random_int(1, $this->ttlJitter);
@@ -88,6 +93,7 @@ final class MemoryCacheManager
 
     public function delete(string $key): void
     {
+        $key = $this->shortenKey($key);
         if ($this->table->delete($key)) {
             $this->metrics->recordDelete();
         }
@@ -95,6 +101,7 @@ final class MemoryCacheManager
 
     public function evict(string $key): void
     {
+        $key = $this->shortenKey($key);
         if ($this->table->delete($key)) {
             $this->metrics->recordEvict();
         }
@@ -155,5 +162,12 @@ final class MemoryCacheManager
         }
 
         return true;
+    }
+
+    private function shortenKey(string $key): string
+    {
+        return strlen($key) > $this->maxKeyLength
+            ? 'h:' . md5($key)
+            : $key;
     }
 }

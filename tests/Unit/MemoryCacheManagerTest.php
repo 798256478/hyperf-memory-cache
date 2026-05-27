@@ -36,6 +36,7 @@ class MemoryCacheManagerTest extends TestCase
         $config->method('get')->willReturnMap([
             ['memory_cache.default_ttl', 60, 60],
             ['memory_cache.ttl_jitter', 5, 0],
+            ['memory_cache.max_key_length', 60, 60],
         ]);
 
         /** @var LoggerFactory&MockObject $loggerFactory */
@@ -287,5 +288,58 @@ class MemoryCacheManagerTest extends TestCase
         );
 
         $this->assertSame(0, $this->metrics->snapshot()['sets']);
+    }
+
+    public function testGetShortensLongKey(): void
+    {
+        $longKey = str_repeat('a', 100);
+        $shortenedKey = 'h:' . md5($longKey);
+
+        $this->table->expects($this->once())
+            ->method('get')
+            ->with($shortenedKey)
+            ->willReturn(null);
+
+        $this->manager->get($longKey);
+    }
+
+    public function testGetKeepsShortKey(): void
+    {
+        $shortKey = 'short_key';
+
+        $this->table->expects($this->once())
+            ->method('get')
+            ->with($shortKey)
+            ->willReturn(null);
+
+        $this->manager->get($shortKey);
+    }
+
+    public function testSetShortensLongKey(): void
+    {
+        $longKey = str_repeat('b', 100);
+        $shortenedKey = 'h:' . md5($longKey);
+
+        $this->serializer->method('serialize')->willReturn('payload');
+        $this->table->method('valueSizeLimit')->willReturn(4096);
+        $this->table->expects($this->once())
+            ->method('set')
+            ->with($shortenedKey, $this->anything(), $this->anything())
+            ->willReturn(true);
+
+        $this->manager->set($longKey, 'value', 60, false);
+    }
+
+    public function testDeleteShortensLongKey(): void
+    {
+        $longKey = str_repeat('c', 100);
+        $shortenedKey = 'h:' . md5($longKey);
+
+        $this->table->expects($this->once())
+            ->method('delete')
+            ->with($shortenedKey)
+            ->willReturn(true);
+
+        $this->manager->delete($longKey);
     }
 }
