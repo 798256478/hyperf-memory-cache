@@ -27,7 +27,6 @@ class MemoryCacheMetricsTest extends TestCase
         $this->assertSame(0, $snap['deletes']);
         $this->assertSame(0, $snap['evicts']);
         $this->assertSame(0, $snap['errors']);
-        $this->assertSame(0, $snap['singleflight_dedupes']);
         $this->assertSame(0, $snap['skipped_too_large']);
     }
 
@@ -87,13 +86,6 @@ class MemoryCacheMetricsTest extends TestCase
         $this->metrics->recordError();
 
         $this->assertSame(1, $this->metrics->snapshot()['errors']);
-    }
-
-    public function testRecordSingleflightDedupe(): void
-    {
-        $this->metrics->recordSingleflightDedupe();
-
-        $this->assertSame(1, $this->metrics->snapshot()['singleflight_dedupes']);
     }
 
     public function testRecordSkippedTooLarge(): void

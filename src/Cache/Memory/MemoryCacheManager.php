@@ -170,4 +170,17 @@ final class MemoryCacheManager
             ? 'h:' . md5($key)
             : $key;
     }
+
+    /**
+     * @return array<string, int|float>
+     */
+    public function snapshot(): array
+    {
+        $data = $this->metrics->snapshot();
+        $data['singleflight_dedupes'] = $this->singleFlight instanceof SingleFlightManager
+            ? $this->singleFlight->getDedupes()
+            : 0;
+
+        return $data;
+    }
 }

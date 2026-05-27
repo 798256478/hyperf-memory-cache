@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Groupbuy\HyperfMemoryCache\Command;
 
 use Groupbuy\HyperfMemoryCache\Cache\Memory\LocalCacheTable;
-use Groupbuy\HyperfMemoryCache\Cache\Memory\MemoryCacheMetrics;
+use Groupbuy\HyperfMemoryCache\Cache\Memory\MemoryCacheManager;
 use Hyperf\Command\Annotation\Command;
 use Hyperf\Command\Command as HyperfCommand;
 use Hyperf\Contract\ConfigInterface;
@@ -58,11 +58,11 @@ final class MemoryCacheStatsCommand extends HyperfCommand
         }
 
         try {
-            /** @var MemoryCacheMetrics $metrics */
-            $metrics = $this->container->get(MemoryCacheMetrics::class);
+            /** @var MemoryCacheManager $manager */
+            $manager = $this->container->get(MemoryCacheManager::class);
             $this->line('');
             $this->line('=== Metrics (note: all 0 in CLI, observe in Worker) ===', 'info');
-            foreach ($metrics->snapshot() as $k => $v) {
+            foreach ($manager->snapshot() as $k => $v) {
                 $this->line(sprintf('  %-22s : %s', $k, var_export($v, true)));
             }
         } catch (\Throwable $e) {

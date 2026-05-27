@@ -18,8 +18,6 @@ final class MemoryCacheMetrics
 
     private int $errors = 0;
 
-    private int $singleflightDedupes = 0;
-
     private int $skippedTooLarge = 0;
 
     public function recordHit(): void
@@ -52,11 +50,6 @@ final class MemoryCacheMetrics
         ++$this->errors;
     }
 
-    public function recordSingleflightDedupe(): void
-    {
-        ++$this->singleflightDedupes;
-    }
-
     public function recordSkippedTooLarge(): void
     {
         ++$this->skippedTooLarge;
@@ -78,7 +71,6 @@ final class MemoryCacheMetrics
             'deletes'               => $this->deletes,
             'evicts'                => $this->evicts,
             'errors'                => $this->errors,
-            'singleflight_dedupes'  => $this->singleflightDedupes,
             'skipped_too_large'     => $this->skippedTooLarge,
         ];
     }
@@ -91,7 +83,6 @@ final class MemoryCacheMetrics
         $this->deletes = 0;
         $this->evicts = 0;
         $this->errors = 0;
-        $this->singleflightDedupes = 0;
         $this->skippedTooLarge = 0;
     }
 }

@@ -24,6 +24,8 @@ final class SingleFlightManager implements SingleFlightManagerInterface
 
     private readonly bool $globallyEnabled;
 
+    private int $dedupes = 0;
+
     public function __construct(ConfigInterface $config)
     {
         $this->globallyEnabled = (bool) $config->get('memory_cache.singleflight.enabled', true);
@@ -42,6 +44,7 @@ final class SingleFlightManager implements SingleFlightManagerInterface
         }
 
         if (isset($this->leaders[$key])) {
+            ++$this->dedupes;
             return $this->waitOrRetry($key, $callback);
         }
 
@@ -60,6 +63,18 @@ final class SingleFlightManager implements SingleFlightManagerInterface
         } finally {
             unset($this->leaders[$key], $this->waiters[$key]);
         }
+    }
+
+    public function getDedupes(): int
+    {
+        return $this->dedupes;
+    }
+
+    public function resetDedupes(): int
+    {
+        $d = $this->dedupes;
+        $this->dedupes = 0;
+        return $d;
     }
 
     /**
