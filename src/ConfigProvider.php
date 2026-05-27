@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 namespace Groupbuy\HyperfMemoryCache;
 
+use Groupbuy\HyperfMemoryCache\Cache\Memory\CacheValueSerializer;
+use Groupbuy\HyperfMemoryCache\Cache\Memory\CacheValueSerializerInterface;
+use Groupbuy\HyperfMemoryCache\Cache\Memory\LocalCacheTable;
+use Groupbuy\HyperfMemoryCache\Cache\Memory\LocalCacheTableInterface;
+use Groupbuy\HyperfMemoryCache\Cache\Memory\SingleFlightManager;
+use Groupbuy\HyperfMemoryCache\Cache\Memory\SingleFlightManagerInterface;
 use Groupbuy\HyperfMemoryCache\Command\MemoryCacheStatsCommand;
 use Groupbuy\HyperfMemoryCache\Listener\MemoryCacheTableInitializer;
 
@@ -12,6 +18,11 @@ class ConfigProvider
     public function __invoke(): array
     {
         return [
+            'dependencies' => [
+                LocalCacheTableInterface::class   => LocalCacheTable::class,
+                CacheValueSerializerInterface::class => CacheValueSerializer::class,
+                SingleFlightManagerInterface::class => SingleFlightManager::class,
+            ],
             'annotations' => [
                 'scan' => [
                     'paths' => [__DIR__],
