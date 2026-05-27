@@ -46,6 +46,7 @@ class MemoryCacheTableInitializer implements ListenerInterface
         $table->column('value', Table::TYPE_STRING, $valueBytes);
         $table->column('expire_at', Table::TYPE_INT);
         $table->column('created_at', Table::TYPE_INT);
+        $table->column('last_access_at', Table::TYPE_INT);
         $table->create();
     }
 }

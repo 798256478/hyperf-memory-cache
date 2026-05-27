@@ -28,5 +28,9 @@ return [
 
     'serializer' => env('MEMORY_CACHE_SERIALIZER', 'auto'),
 
+    'eviction_policy' => env('MEMORY_CACHE_EVICTION_POLICY', 'lru'),
+
+    'eviction_batch_size' => (int) env('MEMORY_CACHE_EVICTION_BATCH_SIZE', 8),
+
     'log_value' => false,
 ];

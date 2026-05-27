@@ -26,6 +26,7 @@ class MemoryCacheMetricsTest extends TestCase
         $this->assertSame(0, $snap['sets']);
         $this->assertSame(0, $snap['deletes']);
         $this->assertSame(0, $snap['evicts']);
+        $this->assertSame(0, $snap['evicts_lru']);
         $this->assertSame(0, $snap['errors']);
         $this->assertSame(0, $snap['skipped_too_large']);
     }
@@ -93,6 +94,14 @@ class MemoryCacheMetricsTest extends TestCase
         $this->metrics->recordSkippedTooLarge();
 
         $this->assertSame(1, $this->metrics->snapshot()['skipped_too_large']);
+    }
+
+    public function testRecordEvictsLru(): void
+    {
+        $this->metrics->recordEvictsLru(3);
+        $this->metrics->recordEvictsLru(2);
+
+        $this->assertSame(5, $this->metrics->snapshot()['evicts_lru']);
     }
 
     public function testReset(): void

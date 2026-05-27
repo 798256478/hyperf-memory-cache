@@ -17,4 +17,6 @@ interface LocalCacheTableInterface
     public function memoryUsage(): int;
 
     public function valueSizeLimit(): int;
+
+    public function evictionPolicy(): string;
 }

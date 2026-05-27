@@ -14,10 +14,16 @@ final class LocalCacheTable implements LocalCacheTableInterface
 
     private readonly int $maxValueBytes;
 
+    private readonly string $evictionPolicy;
+
+    private readonly int $evictionBatchSize;
+
     public function __construct(ConfigInterface $config)
     {
         $this->tableName = (string) $config->get('memory_cache.table_name', 'memory_cache');
         $this->maxValueBytes = max(64, (int) $config->get('memory_cache.max_value_bytes', 3500));
+        $this->evictionPolicy = (string) $config->get('memory_cache.eviction_policy', 'lru');
+        $this->evictionBatchSize = max(1, (int) $config->get('memory_cache.eviction_batch_size', 8));
     }
 
     public function get(string $key): ?array
@@ -31,10 +37,27 @@ final class LocalCacheTable implements LocalCacheTableInterface
             return null;
         }
 
+        $now = time();
+        if ((int) ($row['expire_at'] ?? 0) <= $now) {
+            $table->del($key);
+
+            return null;
+        }
+
+        if ($this->evictionPolicy === 'lru') {
+            $table->set($key, [
+                'value'         => (string) ($row['value'] ?? ''),
+                'expire_at'     => (int) ($row['expire_at'] ?? 0),
+                'created_at'    => (int) ($row['created_at'] ?? 0),
+                'last_access_at' => $now,
+            ]);
+        }
+
         return [
-            'value'      => (string) ($row['value'] ?? ''),
-            'expire_at'  => (int) ($row['expire_at'] ?? 0),
-            'created_at' => (int) ($row['created_at'] ?? 0),
+            'value'         => (string) ($row['value'] ?? ''),
+            'expire_at'     => (int) ($row['expire_at'] ?? 0),
+            'created_at'    => (int) ($row['created_at'] ?? 0),
+            'last_access_at' => (int) ($row['last_access_at'] ?? 0),
         ];
     }
 
@@ -48,11 +71,26 @@ final class LocalCacheTable implements LocalCacheTableInterface
             return false;
         }
 
-        return $table->set($key, [
-            'value'      => $payload,
-            'expire_at'  => $expireAt,
-            'created_at' => time(),
+        $now = time();
+        $ok = $table->set($key, [
+            'value'         => $payload,
+            'expire_at'     => $expireAt,
+            'created_at'    => $now,
+            'last_access_at' => $now,
         ]);
+
+        if (! $ok && $this->evictionPolicy === 'lru') {
+            $this->evictLru($table, $now);
+
+            $ok = $table->set($key, [
+                'value'         => $payload,
+                'expire_at'     => $expireAt,
+                'created_at'    => $now,
+                'last_access_at' => $now,
+            ]);
+        }
+
+        return $ok;
     }
 
     public function delete(string $key): bool
@@ -78,6 +116,49 @@ final class LocalCacheTable implements LocalCacheTableInterface
     public function valueSizeLimit(): int
     {
         return $this->maxValueBytes;
+    }
+
+    public function evictionPolicy(): string
+    {
+        return $this->evictionPolicy;
+    }
+
+    private function evictLru(Table $table, int $now): int
+    {
+        $evicted = 0;
+        $expired = [];
+        $candidates = [];
+
+        foreach ($table as $key => $row) {
+            $expireAt = (int) ($row['expire_at'] ?? 0);
+            if ($expireAt <= $now) {
+                $expired[] = (string) $key;
+                continue;
+            }
+            $candidates[] = [
+                'key'           => (string) $key,
+                'last_access_at' => (int) ($row['last_access_at'] ?? 0),
+            ];
+        }
+
+        foreach ($expired as $key) {
+            $table->del($key);
+            ++$evicted;
+        }
+
+        if ($evicted > 0) {
+            return $evicted;
+        }
+
+        usort($candidates, static fn (array $a, array $b): int => $a['last_access_at'] <=> $b['last_access_at']);
+
+        $batch = min($this->evictionBatchSize, count($candidates));
+        for ($i = 0; $i < $batch; ++$i) {
+            $table->del($candidates[$i]['key']);
+            ++$evicted;
+        }
+
+        return $evicted;
     }
 
     private function table(): ?Table

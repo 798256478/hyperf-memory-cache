@@ -16,6 +16,8 @@ final class MemoryCacheMetrics
 
     private int $evicts = 0;
 
+    private int $evictsLru = 0;
+
     private int $errors = 0;
 
     private int $skippedTooLarge = 0;
@@ -45,6 +47,11 @@ final class MemoryCacheMetrics
         ++$this->evicts;
     }
 
+    public function recordEvictsLru(int $count): void
+    {
+        $this->evictsLru += $count;
+    }
+
     public function recordError(): void
     {
         ++$this->errors;
@@ -70,6 +77,7 @@ final class MemoryCacheMetrics
             'sets'                  => $this->sets,
             'deletes'               => $this->deletes,
             'evicts'                => $this->evicts,
+            'evicts_lru'            => $this->evictsLru,
             'errors'                => $this->errors,
             'skipped_too_large'     => $this->skippedTooLarge,
         ];
@@ -82,6 +90,7 @@ final class MemoryCacheMetrics
         $this->sets = 0;
         $this->deletes = 0;
         $this->evicts = 0;
+        $this->evictsLru = 0;
         $this->errors = 0;
         $this->skippedTooLarge = 0;
     }

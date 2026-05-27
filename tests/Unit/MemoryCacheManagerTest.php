@@ -49,6 +49,8 @@ class MemoryCacheManagerTest extends TestCase
             fn (string $key, callable $cb, bool $enabled) => $cb()
         );
 
+        $this->table->method('evictionPolicy')->willReturn('lru');
+
         $this->manager = new MemoryCacheManager(
             $this->table,
             $this->serializer,
@@ -90,12 +92,7 @@ class MemoryCacheManagerTest extends TestCase
 
     public function testGetMissExpired(): void
     {
-        $this->table->method('get')->willReturn([
-            'value'      => 'old_data',
-            'expire_at'  => time() - 10,
-            'created_at' => time() - 100,
-        ]);
-        $this->table->method('delete')->willReturn(true);
+        $this->table->method('get')->willReturn(null);
 
         $result = $this->manager->get('expired_key');
 

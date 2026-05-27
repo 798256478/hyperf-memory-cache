@@ -44,6 +44,8 @@ final class MemoryCacheStatsCommand extends HyperfCommand
             ((bool) $config->get('memory_cache.singleflight.enabled')) ? 'true' : 'false',
             (string) $config->get('memory_cache.singleflight.wait_timeout')));
         $this->line(sprintf('  serializer       : %s', (string) $config->get('memory_cache.serializer')));
+        $this->line(sprintf('  eviction_policy  : %s', (string) $config->get('memory_cache.eviction_policy', 'lru')));
+        $this->line(sprintf('  eviction_batch   : %d', (int) $config->get('memory_cache.eviction_batch_size', 8)));
 
         try {
             /** @var LocalCacheTable $table */

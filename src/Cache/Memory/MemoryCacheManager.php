@@ -40,11 +40,8 @@ final class MemoryCacheManager
     {
         $key = $this->shortenKey($key);
         $row = $this->table->get($key);
-        if ($row === null || $row['expire_at'] <= time()) {
+        if ($row === null) {
             $this->metrics->recordMiss();
-            if ($row !== null) {
-                $this->table->delete($key);
-            }
 
             return ['hit' => false, 'value' => null];
         }
@@ -87,6 +84,9 @@ final class MemoryCacheManager
         if ($ok) {
             $this->metrics->recordSet();
         } else {
+            if ($this->table->evictionPolicy() === 'lru') {
+                $this->metrics->recordEvictsLru(1);
+            }
             $this->metrics->recordError();
         }
     }
