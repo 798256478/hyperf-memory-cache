@@ -42,12 +42,10 @@ class MemoryCacheTableInitializer implements ListenerInterface
         $valueBytes = max(64, (int) $config->get('memory_cache.max_value_bytes', 3500));
         $conflictProportion = (float) $config->get('memory_cache.conflict_proportion', 0.2);
 
-        $table = new Table($size, $conflictProportion);
+        $table = TableManager::initialize($tableName, $size, $conflictProportion);
         $table->column('value', Table::TYPE_STRING, $valueBytes);
         $table->column('expire_at', Table::TYPE_INT);
         $table->column('created_at', Table::TYPE_INT);
         $table->create();
-
-        TableManager::add($tableName, $table);
     }
 }
