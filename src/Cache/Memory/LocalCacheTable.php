@@ -123,6 +123,20 @@ final class LocalCacheTable implements LocalCacheTableInterface
         return $this->evictionPolicy;
     }
 
+    public function clear(): int
+    {
+        $table = $this->table();
+        if ($table === null) {
+            return 0;
+        }
+        $cleared = 0;
+        foreach ($table as $key => $row) {
+            $table->del((string) $key);
+            ++$cleared;
+        }
+        return $cleared;
+    }
+
     private function evictLru(Table $table, int $now): int
     {
         $evicted = 0;

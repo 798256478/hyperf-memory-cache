@@ -171,6 +171,11 @@ final class MemoryCacheManager
             : $key;
     }
 
+    public function clear(): int
+    {
+        return $this->table->clear();
+    }
+
     /**
      * @return array<string, int|float>
      */
