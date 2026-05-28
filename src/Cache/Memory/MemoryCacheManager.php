@@ -13,6 +13,8 @@ final class MemoryCacheManager
 {
     private readonly LoggerInterface $logger;
 
+    private readonly bool $enabled;
+
     private readonly int $defaultTtl;
 
     private readonly int $ttlJitter;
@@ -27,6 +29,7 @@ final class MemoryCacheManager
         ConfigInterface $config,
         LoggerFactory $loggerFactory,
     ) {
+        $this->enabled = (bool) $config->get('memory_cache.enabled', true);
         $this->defaultTtl = max(1, (int) $config->get('memory_cache.default_ttl', 60));
         $this->ttlJitter = max(0, (int) $config->get('memory_cache.ttl_jitter', 5));
         $this->maxKeyLength = max(16, (int) $config->get('memory_cache.max_key_length', 60));
@@ -38,6 +41,9 @@ final class MemoryCacheManager
      */
     public function get(string $key): array
     {
+        if (! $this->enabled) {
+            return ['hit' => false, 'value' => null];
+        }
         $key = $this->shortenKey($key);
         $row = $this->table->get($key);
         if ($row === null) {
@@ -62,6 +68,9 @@ final class MemoryCacheManager
 
     public function set(string $key, mixed $value, int $ttl, bool $jitter = true): void
     {
+        if (! $this->enabled) {
+            return;
+        }
         $key = $this->shortenKey($key);
         $effectiveTtl = max(1, $ttl);
         if ($jitter && $this->ttlJitter > 0) {
@@ -93,6 +102,9 @@ final class MemoryCacheManager
 
     public function delete(string $key): void
     {
+        if (! $this->enabled) {
+            return;
+        }
         $key = $this->shortenKey($key);
         if ($this->table->delete($key)) {
             $this->metrics->recordDelete();
@@ -101,6 +113,9 @@ final class MemoryCacheManager
 
     public function evict(string $key): void
     {
+        if (! $this->enabled) {
+            return;
+        }
         $key = $this->shortenKey($key);
         if ($this->table->delete($key)) {
             $this->metrics->recordEvict();
@@ -122,6 +137,9 @@ final class MemoryCacheManager
         bool $singleFlight = true,
         bool $jitter = true,
     ): mixed {
+        if (! $this->enabled) {
+            return $callback();
+        }
         $result = $this->get($key);
         if ($result['hit']) {
             return $result['value'];
@@ -173,6 +191,9 @@ final class MemoryCacheManager
 
     public function clear(): int
     {
+        if (! $this->enabled) {
+            return 0;
+        }
         return $this->table->clear();
     }
 
