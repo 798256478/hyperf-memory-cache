@@ -39,7 +39,7 @@ class ConfigProvider
                     'id'          => 'config',
                     'description' => 'The default configuration of hyperf-memory-cache',
                     'source'      => __DIR__ . '/../publish/memory_cache.php',
-                    'destination' => 'config/autoload/memory_cache.php',
+                    'destination' => BASE_PATH . '/config/autoload/memory_cache.php',
                 ],
             ],
         ];
