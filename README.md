@@ -1,16 +1,17 @@
 # groupbuy/hyperf-memory-cache
 
-基于 Swoole\Table 的 Hyperf 本地一级缓存（L1），通过注解驱动 AOP 实现透明缓存读写，内置单飞防击穿、TTL 抖动防雪崩、空值缓存防穿透。
+基于 Swoole\Table 的 Hyperf 本地一级缓存（L1），通过注解驱动 AOP 实现透明缓存读写，内置单飞防击穿、TTL 抖动防雪崩、空值缓存防穿透、多表隔离。
 
 ## 特性
 
 - **注解驱动**：`#[MemoryCache]` 读缓存 + `#[MemoryCacheEvict]` 写失效，零侵入业务代码
 - **Swoole\Table 共享内存**：同进程组所有 Worker 共享，无序列化/反序列化开销（仅存储层序列化）
+- **多表隔离**：按 channel 配置独立 Swoole\Table 实例，每个表可设不同 `max_value_bytes`，适配不同业务场景
 - **单飞（Single-flight）**：同 Worker 内同 key 并发回源只放行一个，其余协程等待结果
 - **TTL 抖动**：`ttl + random_int(1, jitter)` 防止缓存雪崩
 - **空值缓存**：`cacheNull: true` 防止缓存穿透
 - **安全降级**：缓存层任何异常自动降级走原方法，永不向业务抛
-- **自动 Table 注册**：通过 `BeforeMainServerStart` 事件自动创建 Swoole\Table，无需手动合并配置
+- **自动 Table 注册**：通过 `BeforeMainServerStart` 事件自动创建所有配置的 Swoole\Table，无需手动合并配置
 - **运行时指标**：hits/misses/命中率/evicts/errors 等，支持 Prometheus 接入
 
 ## 安装
@@ -71,6 +72,59 @@ class ConfigService
 
 > **重要**：`MemoryCacheEvict` 的 `key` 模板必须与对应 `MemoryCache` 完全一致，否则失效不生效。
 
+## 多表（Channel）
+
+不同业务场景对单值序列化后字节数上限的需求不同——例如商品详情缓存通常比配置缓存大得多。通过 `channel` 参数将缓存路由到不同的 Swoole\Table 实例，每个表独立配置 `max_value_bytes`。
+
+### 配置
+
+```php
+// config/autoload/memory_cache.php
+return [
+    'enabled' => (bool) env('MEMORY_CACHE_ENABLE', false),
+    'tables'  => [
+        'default' => [
+            'table_name'          => 'memory_cache',
+            'table_size'          => (int) env('MEMORY_CACHE_TABLE_SIZE', 16384),
+            'max_value_bytes'     => 3500,
+            'conflict_proportion' => 0.2,
+        ],
+        'goods' => [
+            'table_name'          => 'memory_cache_goods',
+            'table_size'          => (int) env('MEMORY_CACHE_GOODS_TABLE_SIZE', 4096),
+            'max_value_bytes'     => 6000,
+            'conflict_proportion' => 0.2,
+        ],
+    ],
+    // ... 其他全局配置
+];
+```
+
+- `default` channel **必须存在**，未显式指定 channel 时所有操作走此表
+- 每个 channel 的 `table_name` 必须全局唯一
+- 各表 `max_value_bytes` 独立生效，超限值仅旁路跳过，不会截断
+
+### 注解指定 channel
+
+```php
+#[MemoryCache(key: 'goods:{id}', channel: 'goods', ttl: 30)]
+public function getGoodsDetail(string $id): array { ... }
+
+#[MemoryCacheEvict(key: 'goods:{id}', channel: 'goods')]
+public function updateGoodsDetail(string $id, array $data): void { ... }
+```
+
+### 编程式指定 channel
+
+```php
+$value = $this->manager->remember(
+    'goods:123',
+    fn () => $this->repository->getGoodsDetail('123'),
+    ttl: 30,
+    channel: 'goods',
+);
+```
+
 ## 注解参数
 
 ### `#[MemoryCache]`
@@ -82,6 +136,7 @@ class ConfigService
 | `cacheNull` | `bool` | `false` | 是否缓存 `null`/`[]`/`''`/`false` 等空值（防穿透时打开） |
 | `singleFlight` | `bool` | `true` | 是否启用单飞防击穿；与全局 `singleflight.enabled` 取 AND |
 | `jitter` | `bool` | `true` | 是否对 TTL 加随机抖动防雪崩 |
+| `channel` | `string` | `'default'` | 缓存表 channel，对应 `tables` 配置中的 key |
 
 ### `#[MemoryCacheEvict]`
 
@@ -89,6 +144,7 @@ class ConfigService
 |------|------|--------|------|
 | `key` | `string` | 必填 | 要失效的 key 模板，必须与读方法 `#[MemoryCache(key: ...)]` 一致 |
 | `alwaysEvict` | `bool` | `false` | 即便方法抛异常也强制清缓存；默认 `false`（事务性写优先） |
+| `channel` | `string` | `'default'` | 缓存表 channel，必须与读方法 `#[MemoryCache(channel: ...)]` 一致 |
 
 ## Key 模板规则
 
@@ -108,14 +164,12 @@ public function getShopConfig(string $sid, string $column): array { ... }
 
 配置文件：`config/autoload/memory_cache.php`
 
+### 全局配置
+
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `enabled` | `false` | 总开关（`.env: MEMORY_CACHE_ENABLE`）；实时读取，支持一键回滚 |
-| `table_name` | `memory_cache` | Swoole\Table 名称 |
-| `table_size` | `16384` | Table 行数（`.env: MEMORY_CACHE_TABLE_SIZE`） |
-| `conflict_proportion` | `0.2` | Table 哈希冲突比例 |
 | `max_key_length` | `60` | Key 超过此长度走 md5 |
-| `max_value_bytes` | `3500` | 单值序列化后字节数上限；超过不缓存 |
 | `default_ttl` | `60` | 注解未声明 TTL 时的默认值（秒） |
 | `ttl_jitter` | `5` | TTL 抖动上限（秒） |
 | `singleflight.enabled` | `true` | 单飞防击穿开关 |
@@ -123,11 +177,23 @@ public function getShopConfig(string $sid, string $column): array { ... }
 | `serializer` | `auto` | 序列化器：`auto`/`php`/`igbinary`（`.env: MEMORY_CACHE_SERIALIZER`） |
 | `log_value` | `false` | 是否在 debug 日志中输出 value（默认关闭防敏感数据泄露） |
 
+### 多表配置（`tables`）
+
+每个 channel 独立定义一个 Swoole\Table 实例：
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `table_name` | `memory_cache` | Swoole\Table 名称，必须全局唯一 |
+| `table_size` | `16384` | Table 行数 |
+| `max_value_bytes` | `3500` | 单值序列化后字节数上限；超过不缓存 |
+| `conflict_proportion` | `0.2` | Table 哈希冲突比例 |
+
 ### 容量估算
 
 ```
-内存占用 ≈ table_size × (max_value_bytes + 16) × (1 + conflict_proportion)
-默认    ≈ 16384 × 3616 × 1.2 ≈ 68 MiB / Worker
+单表内存占用 ≈ table_size × (max_value_bytes + 16) × (1 + conflict_proportion)
+default 表   ≈ 16384 × 3616 × 1.2 ≈ 68 MiB
+goods 表     ≈  4096 × 6016 × 1.2 ≈ 28 MiB
 ```
 
 调整 `table_size` 和 `max_value_bytes` 时注意：
@@ -158,6 +224,7 @@ public function getShopConfig(string $sid, string $column): array { ... }
 ```php
 use Groupbuy\HyperfMemoryCache\Cache\Memory\MemoryCacheManager;
 
+// 默认 channel
 $value = $this->manager->remember(
     'shop:S001:cfg:theme',
     fn () => $this->repository->getConfig('S001', 'theme'),
@@ -166,7 +233,28 @@ $value = $this->manager->remember(
     singleFlight: true,
     jitter: true,
 );
+
+// 指定 channel
+$value = $this->manager->remember(
+    'goods:123',
+    fn () => $this->repository->getGoodsDetail('123'),
+    ttl: 30,
+    channel: 'goods',
+);
 ```
+
+### MemoryCacheManager 方法签名
+
+| 方法 | 说明 |
+|------|------|
+| `get(string $key, string $channel = 'default'): array` | 读取缓存，返回 `['hit' => bool, 'value' => mixed]` |
+| `set(string $key, mixed $value, int $ttl, bool $jitter = true, string $channel = 'default'): void` | 写入缓存 |
+| `delete(string $key, string $channel = 'default'): void` | 删除缓存 |
+| `evict(string $key, string $channel = 'default'): void` | 驱逐缓存（计入 evicts 指标） |
+| `remember(string $key, Closure $callback, ?int $ttl = null, bool $cacheNull = false, bool $singleFlight = true, bool $jitter = true, string $channel = 'default'): mixed` | 缓存回源 |
+| `clear(string $channel = 'default'): int` | 清空指定 channel 的所有缓存 |
+| `clearAll(): int` | 清空所有 channel 的缓存 |
+| `snapshot(): array` | 获取运行时指标快照 |
 
 ## CLI 命令
 
@@ -174,7 +262,7 @@ $value = $this->manager->remember(
 php bin/hyperf.php memory-cache:stats
 ```
 
-查看当前 L1 缓存配置与指标模板。
+查看当前 L1 缓存配置与指标模板，包含所有 channel 的表状态。
 
 > **注意**：CLI 与 Server 是不同进程，CLI 看不到 Server 的 Swoole\Table 运行时数据。真正的运行时指标请走 Prometheus 接入。
 
@@ -195,22 +283,39 @@ php bin/hyperf.php memory-cache:stats
                ▼
 ┌──────────────────────────────────────────────────────┐
 │  MemoryCacheManager                                   │
-│  ├─ LocalCacheTable       Swoole\Table 读写          │
+│  ├─ LocalCacheTablePool   按 channel 获取 Table 实例 │
 │  ├─ CacheValueSerializer  igbinary / php serialize    │
 │  ├─ SingleFlightManager   防击穿                     │
 │  └─ MemoryCacheMetrics    命中率等指标                │
+└──────────────┬───────────────────────────────────────┘
+               ▼
+┌──────────────────────────────────────────────────────┐
+│  LocalCacheTablePool                                  │
+│  ├─ channel 'default' → LocalCacheTable (3500B)      │
+│  ├─ channel 'goods'   → LocalCacheTable (6000B)      │
+│  └─ ...                                              │
 └──────────────────────────────────────────────────────┘
 ```
 
 ### Swoole\Table 自动注册
 
-包通过 `MemoryCacheTableInitializer` 监听 `BeforeMainServerStart` 事件，在 Server 启动前自动创建 Swoole\Table。无需手动在 `swoole_table.php` 中添加表定义。
+包通过 `MemoryCacheTableInitializer` 监听 `BeforeMainServerStart` 事件，在 Server 启动前遍历 `tables` 配置，自动创建所有 Swoole\Table 实例。无需手动在 `swoole_table.php` 中添加表定义。
 
 ### 缓存失效语义
 
 - `#[MemoryCacheEvict]` 在方法**成功执行后**清缓存
 - 方法抛异常时**不清**（除非 `alwaysEvict=true`），避免失败写引发数据不一致
 - 同一方法同时有 `MemoryCache` + `MemoryCacheEvict` 注解时，以 Evict 为准（写优先）
+
+## 升级指南
+
+### v1.1.x → v1.2.0
+
+v1.2.0 新增多表（channel）支持，**完全向后兼容**：
+
+- 未显式指定 `channel` 时默认走 `'default'`，行为与 v1.1.x 一致
+- 旧的单表配置（`table_name`/`table_size`/`max_value_bytes` 在顶层）仍可使用，初始化器会自动兼容
+- 如需使用多表，将顶层表配置迁移至 `tables.default`，并按需添加其他 channel
 
 ## 测试
 

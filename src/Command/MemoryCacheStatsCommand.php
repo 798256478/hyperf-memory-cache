@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Groupbuy\HyperfMemoryCache\Command;
 
-use Groupbuy\HyperfMemoryCache\Cache\Memory\LocalCacheTable;
+use Groupbuy\HyperfMemoryCache\Cache\Memory\LocalCacheTablePool;
 use Groupbuy\HyperfMemoryCache\Cache\Memory\MemoryCacheManager;
 use Hyperf\Command\Annotation\Command;
 use Hyperf\Command\Command as HyperfCommand;
@@ -35,9 +35,7 @@ final class MemoryCacheStatsCommand extends HyperfCommand
         $this->line('=== Local L1 Memory Cache Configuration ===', 'info');
         $this->line(sprintf('  enabled          : %s', $enabled ? 'true' : 'false'),
             $enabled ? 'info' : 'comment');
-        $this->line(sprintf('  table_name       : %s', $config->get('memory_cache.table_name')));
         $this->line(sprintf('  max_key_length   : %d',  (int) $config->get('memory_cache.max_key_length')));
-        $this->line(sprintf('  max_value_bytes  : %d',  (int) $config->get('memory_cache.max_value_bytes')));
         $this->line(sprintf('  default_ttl      : %ds', (int) $config->get('memory_cache.default_ttl')));
         $this->line(sprintf('  ttl_jitter       : %ds', (int) $config->get('memory_cache.ttl_jitter')));
         $this->line(sprintf('  singleflight     : %s, wait_timeout=%ss',
@@ -48,13 +46,20 @@ final class MemoryCacheStatsCommand extends HyperfCommand
         $this->line(sprintf('  eviction_batch   : %d', (int) $config->get('memory_cache.eviction_batch_size', 8)));
 
         try {
-            /** @var LocalCacheTable $table */
-            $table = $this->container->get(LocalCacheTable::class);
+            /** @var LocalCacheTablePool $pool */
+            $pool = $this->container->get(LocalCacheTablePool::class);
+            $channels = $pool->channels();
+
             $this->line('');
-            $this->line('=== Swoole\Table Status (CLI process only) ===', 'info');
-            $this->line(sprintf('  rows in use      : %d', $table->count()));
-            $this->line(sprintf('  memory size      : %d bytes', $table->memoryUsage()));
-            $this->line(sprintf('  value size limit : %d bytes', $table->valueSizeLimit()));
+            $this->line(sprintf('=== Swoole\Table Channels (%d) ===', count($channels)), 'info');
+
+            foreach ($channels as $channel) {
+                $table = $pool->get($channel);
+                $this->line(sprintf('  [%s]', $channel), 'info');
+                $this->line(sprintf('    rows in use      : %d', $table->count()));
+                $this->line(sprintf('    memory size      : %d bytes', $table->memoryUsage()));
+                $this->line(sprintf('    value size limit : %d bytes', $table->valueSizeLimit()));
+            }
         } catch (\Throwable $e) {
             $this->line('Table unavailable: ' . $e->getMessage(), 'error');
         }

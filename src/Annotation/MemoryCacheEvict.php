@@ -13,6 +13,7 @@ final class MemoryCacheEvict extends AbstractAnnotation
     public function __construct(
         public string $key,
         public bool $alwaysEvict = false,
+        public string $channel = 'default',
     ) {
     }
 }

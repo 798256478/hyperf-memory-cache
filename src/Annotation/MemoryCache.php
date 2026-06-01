@@ -16,6 +16,7 @@ final class MemoryCache extends AbstractAnnotation
         public bool $cacheNull = false,
         public bool $singleFlight = true,
         public bool $jitter = true,
+        public string $channel = 'default',
     ) {
     }
 }

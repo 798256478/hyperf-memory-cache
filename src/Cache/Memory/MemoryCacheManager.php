@@ -22,7 +22,7 @@ final class MemoryCacheManager
     private readonly int $maxKeyLength;
 
     public function __construct(
-        private readonly LocalCacheTableInterface $table,
+        private readonly LocalCacheTablePool $pool,
         private readonly CacheValueSerializerInterface $serializer,
         private readonly SingleFlightManagerInterface $singleFlight,
         private readonly MemoryCacheMetrics $metrics,
@@ -39,13 +39,14 @@ final class MemoryCacheManager
     /**
      * @return array{hit: bool, value: mixed}
      */
-    public function get(string $key): array
+    public function get(string $key, string $channel = 'default'): array
     {
         if (! $this->enabled) {
             return ['hit' => false, 'value' => null];
         }
         $key = $this->shortenKey($key);
-        $row = $this->table->get($key);
+        $table = $this->pool->get($channel);
+        $row = $table->get($key);
         if ($row === null) {
             $this->metrics->recordMiss();
 
@@ -56,7 +57,7 @@ final class MemoryCacheManager
         if (! $decoded['ok']) {
             $this->metrics->recordMiss();
             $this->metrics->recordError();
-            $this->table->delete($key);
+            $table->delete($key);
 
             return ['hit' => false, 'value' => null];
         }
@@ -66,7 +67,7 @@ final class MemoryCacheManager
         return ['hit' => true, 'value' => $decoded['value']];
     }
 
-    public function set(string $key, mixed $value, int $ttl, bool $jitter = true): void
+    public function set(string $key, mixed $value, int $ttl, bool $jitter = true, string $channel = 'default'): void
     {
         if (! $this->enabled) {
             return;
@@ -77,47 +78,49 @@ final class MemoryCacheManager
             $effectiveTtl += random_int(1, $this->ttlJitter);
         }
 
+        $table = $this->pool->get($channel);
         $payload = $this->serializer->serialize($value);
-        if (strlen($payload) > $this->table->valueSizeLimit()) {
+        if (strlen($payload) > $table->valueSizeLimit()) {
             $this->metrics->recordSkippedTooLarge();
             $this->logger->info('memory_cache skip too large', [
-                'key'        => $key,
-                'bytes'      => strlen($payload),
-                'limit'      => $this->table->valueSizeLimit(),
+                'key'     => $key,
+                'channel' => $channel,
+                'bytes'   => strlen($payload),
+                'limit'   => $table->valueSizeLimit(),
             ]);
 
             return;
         }
 
-        $ok = $this->table->set($key, $payload, time() + $effectiveTtl);
+        $ok = $table->set($key, $payload, time() + $effectiveTtl);
         if ($ok) {
             $this->metrics->recordSet();
         } else {
-            if ($this->table->evictionPolicy() === 'lru') {
+            if ($table->evictionPolicy() === 'lru') {
                 $this->metrics->recordEvictsLru(1);
             }
             $this->metrics->recordError();
         }
     }
 
-    public function delete(string $key): void
+    public function delete(string $key, string $channel = 'default'): void
     {
         if (! $this->enabled) {
             return;
         }
         $key = $this->shortenKey($key);
-        if ($this->table->delete($key)) {
+        if ($this->pool->get($channel)->delete($key)) {
             $this->metrics->recordDelete();
         }
     }
 
-    public function evict(string $key): void
+    public function evict(string $key, string $channel = 'default'): void
     {
         if (! $this->enabled) {
             return;
         }
         $key = $this->shortenKey($key);
-        if ($this->table->delete($key)) {
+        if ($this->pool->get($channel)->delete($key)) {
             $this->metrics->recordEvict();
         }
     }
@@ -136,27 +139,29 @@ final class MemoryCacheManager
         bool $cacheNull = false,
         bool $singleFlight = true,
         bool $jitter = true,
+        string $channel = 'default',
     ): mixed {
         if (! $this->enabled) {
             return $callback();
         }
-        $result = $this->get($key);
+        $result = $this->get($key, $channel);
         if ($result['hit']) {
             return $result['value'];
         }
 
         $effectiveTtl = $ttl ?? $this->defaultTtl;
+        $sfKey = "{$channel}:{$key}";
 
         $value = $this->singleFlight->do(
-            $key,
-            function () use ($key, $callback, $effectiveTtl, $cacheNull, $jitter) {
-                $recheck = $this->get($key);
+            $sfKey,
+            function () use ($key, $callback, $effectiveTtl, $cacheNull, $jitter, $channel) {
+                $recheck = $this->get($key, $channel);
                 if ($recheck['hit']) {
                     return $recheck['value'];
                 }
                 $value = $callback();
                 if ($this->shouldCache($value, $cacheNull)) {
-                    $this->set($key, $value, $effectiveTtl, $jitter);
+                    $this->set($key, $value, $effectiveTtl, $jitter, $channel);
                 }
 
                 return $value;
@@ -189,16 +194,24 @@ final class MemoryCacheManager
             : $key;
     }
 
-    public function clear(): int
+    public function clear(string $channel = 'default'): int
     {
         if (! $this->enabled) {
             return 0;
         }
-        return $this->table->clear();
+        return $this->pool->get($channel)->clear();
+    }
+
+    public function clearAll(): int
+    {
+        if (! $this->enabled) {
+            return 0;
+        }
+        return $this->pool->clearAll();
     }
 
     /**
-     * @return array<string, int|float>
+     * @return array<string, int|float|string>
      */
     public function snapshot(): array
     {
@@ -206,6 +219,18 @@ final class MemoryCacheManager
         $data['singleflight_dedupes'] = $this->singleFlight instanceof SingleFlightManager
             ? $this->singleFlight->getDedupes()
             : 0;
+
+        $perChannel = [];
+        foreach ($this->pool->channels() as $ch) {
+            $t = $this->pool->get($ch);
+            $perChannel[$ch] = [
+                'table_name'      => $t->channel(),
+                'value_size_limit' => $t->valueSizeLimit(),
+                'count'           => $t->count(),
+                'memory_usage'    => $t->memoryUsage(),
+            ];
+        }
+        $data['channels'] = $perChannel;
 
         return $data;
     }

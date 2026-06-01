@@ -77,6 +77,7 @@ final class MemoryCacheAspect extends AbstractAspect
             $anno->cacheNull,
             $anno->singleFlight,
             $anno->jitter,
+            $anno->channel,
         );
     }
 
@@ -90,12 +91,12 @@ final class MemoryCacheAspect extends AbstractAspect
 
         try {
             $result = $jp->process();
-            $this->manager->evict($key);
+            $this->manager->evict($key, $anno->channel);
 
             return $result;
         } catch (\Throwable $e) {
             if ($anno->alwaysEvict) {
-                $this->manager->evict($key);
+                $this->manager->evict($key, $anno->channel);
             }
 
             throw $e;

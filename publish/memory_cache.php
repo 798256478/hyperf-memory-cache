@@ -7,15 +7,22 @@ use function Hyperf\Support\env;
 return [
     'enabled' => (bool) env('MEMORY_CACHE_ENABLE', false),
 
-    'table_name' => 'memory_cache',
-
-    'table_size' => (int) env('MEMORY_CACHE_TABLE_SIZE', 16384),
-
-    'conflict_proportion' => 0.2,
+    'tables' => [
+        'default' => [
+            'table_name' => 'memory_cache',
+            'table_size' => (int) env('MEMORY_CACHE_TABLE_SIZE', 16384),
+            'max_value_bytes' => 3500,
+            'conflict_proportion' => 0.2,
+        ],
+        'goods' => [
+            'table_name' => 'memory_cache_goods',
+            'table_size' => (int) env('MEMORY_CACHE_GOODS_TABLE_SIZE', 4096),
+            'max_value_bytes' => 6000,
+            'conflict_proportion' => 0.2,
+        ],
+    ],
 
     'max_key_length' => 60,
-
-    'max_value_bytes' => 3500,
 
     'default_ttl' => 60,
 

@@ -10,6 +10,8 @@ use Swoole\Table;
 
 final class LocalCacheTable implements LocalCacheTableInterface
 {
+    private readonly string $channel;
+
     private readonly string $tableName;
 
     private readonly int $maxValueBytes;
@@ -18,12 +20,26 @@ final class LocalCacheTable implements LocalCacheTableInterface
 
     private readonly int $evictionBatchSize;
 
-    public function __construct(ConfigInterface $config)
+    public function __construct(ConfigInterface $config, string $channel = 'default')
     {
-        $this->tableName = (string) $config->get('memory_cache.table_name', 'memory_cache');
-        $this->maxValueBytes = max(64, (int) $config->get('memory_cache.max_value_bytes', 3500));
+        $this->channel = $channel;
+
+        $tableConfig = (array) $config->get("memory_cache.tables.{$channel}", []);
+
+        $this->tableName = (string) ($tableConfig['table_name']
+            ?? $config->get('memory_cache.table_name', 'memory_cache'));
+
+        $this->maxValueBytes = max(64, (int) ($tableConfig['max_value_bytes']
+            ?? $config->get('memory_cache.max_value_bytes', 3500)));
+
         $this->evictionPolicy = (string) $config->get('memory_cache.eviction_policy', 'lru');
+
         $this->evictionBatchSize = max(1, (int) $config->get('memory_cache.eviction_batch_size', 8));
+    }
+
+    public function channel(): string
+    {
+        return $this->channel;
     }
 
     public function get(string $key): ?array
@@ -46,17 +62,17 @@ final class LocalCacheTable implements LocalCacheTableInterface
 
         if ($this->evictionPolicy === 'lru') {
             $table->set($key, [
-                'value'         => (string) ($row['value'] ?? ''),
-                'expire_at'     => (int) ($row['expire_at'] ?? 0),
-                'created_at'    => (int) ($row['created_at'] ?? 0),
+                'value'          => (string) ($row['value'] ?? ''),
+                'expire_at'      => (int) ($row['expire_at'] ?? 0),
+                'created_at'     => (int) ($row['created_at'] ?? 0),
                 'last_access_at' => $now,
             ]);
         }
 
         return [
-            'value'         => (string) ($row['value'] ?? ''),
-            'expire_at'     => (int) ($row['expire_at'] ?? 0),
-            'created_at'    => (int) ($row['created_at'] ?? 0),
+            'value'          => (string) ($row['value'] ?? ''),
+            'expire_at'      => (int) ($row['expire_at'] ?? 0),
+            'created_at'     => (int) ($row['created_at'] ?? 0),
             'last_access_at' => (int) ($row['last_access_at'] ?? 0),
         ];
     }
@@ -73,9 +89,9 @@ final class LocalCacheTable implements LocalCacheTableInterface
 
         $now = time();
         $ok = $table->set($key, [
-            'value'         => $payload,
-            'expire_at'     => $expireAt,
-            'created_at'    => $now,
+            'value'          => $payload,
+            'expire_at'      => $expireAt,
+            'created_at'     => $now,
             'last_access_at' => $now,
         ]);
 
@@ -83,9 +99,9 @@ final class LocalCacheTable implements LocalCacheTableInterface
             $this->evictLru($table, $now);
 
             $ok = $table->set($key, [
-                'value'         => $payload,
-                'expire_at'     => $expireAt,
-                'created_at'    => $now,
+                'value'          => $payload,
+                'expire_at'      => $expireAt,
+                'created_at'     => $now,
                 'last_access_at' => $now,
             ]);
         }
@@ -150,7 +166,7 @@ final class LocalCacheTable implements LocalCacheTableInterface
                 continue;
             }
             $candidates[] = [
-                'key'           => (string) $key,
+                'key'            => (string) $key,
                 'last_access_at' => (int) ($row['last_access_at'] ?? 0),
             ];
         }

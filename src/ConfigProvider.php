@@ -6,8 +6,7 @@ namespace Groupbuy\HyperfMemoryCache;
 
 use Groupbuy\HyperfMemoryCache\Cache\Memory\CacheValueSerializer;
 use Groupbuy\HyperfMemoryCache\Cache\Memory\CacheValueSerializerInterface;
-use Groupbuy\HyperfMemoryCache\Cache\Memory\LocalCacheTable;
-use Groupbuy\HyperfMemoryCache\Cache\Memory\LocalCacheTableInterface;
+use Groupbuy\HyperfMemoryCache\Cache\Memory\LocalCacheTablePool;
 use Groupbuy\HyperfMemoryCache\Cache\Memory\SingleFlightManager;
 use Groupbuy\HyperfMemoryCache\Cache\Memory\SingleFlightManagerInterface;
 use Groupbuy\HyperfMemoryCache\Command\MemoryCacheStatsCommand;
@@ -19,9 +18,9 @@ class ConfigProvider
     {
         return [
             'dependencies' => [
-                LocalCacheTableInterface::class   => LocalCacheTable::class,
+                LocalCacheTablePool::class           => LocalCacheTablePool::class,
                 CacheValueSerializerInterface::class => CacheValueSerializer::class,
-                SingleFlightManagerInterface::class => SingleFlightManager::class,
+                SingleFlightManagerInterface::class  => SingleFlightManager::class,
             ],
             'annotations' => [
                 'scan' => [

@@ -7,6 +7,7 @@ namespace Groupbuy\HyperfMemoryCache\Tests\Unit;
 use Groupbuy\HyperfMemoryCache\Cache\Memory\MemoryCacheManager;
 use Groupbuy\HyperfMemoryCache\Cache\Memory\CacheValueSerializerInterface;
 use Groupbuy\HyperfMemoryCache\Cache\Memory\LocalCacheTableInterface;
+use Groupbuy\HyperfMemoryCache\Cache\Memory\LocalCacheTablePool;
 use Groupbuy\HyperfMemoryCache\Cache\Memory\SingleFlightManagerInterface;
 use Groupbuy\HyperfMemoryCache\Cache\Memory\MemoryCacheMetrics;
 use Hyperf\Contract\ConfigInterface;
@@ -25,11 +26,17 @@ class MemoryCacheManagerTest extends TestCase
 
     private CacheValueSerializerInterface&MockObject $serializer;
 
+    private LocalCacheTablePool&MockObject $pool;
+
     protected function setUp(): void
     {
         $this->metrics = new MemoryCacheMetrics();
         $this->table = $this->createMock(LocalCacheTableInterface::class);
         $this->serializer = $this->createMock(CacheValueSerializerInterface::class);
+
+        $this->pool = $this->createMock(LocalCacheTablePool::class);
+        $this->pool->method('get')->willReturn($this->table);
+        $this->pool->method('channels')->willReturn(['default']);
 
         /** @var ConfigInterface&MockObject $config */
         $config = $this->createMock(ConfigInterface::class);
@@ -52,7 +59,7 @@ class MemoryCacheManagerTest extends TestCase
         $this->table->method('evictionPolicy')->willReturn('lru');
 
         $this->manager = new MemoryCacheManager(
-            $this->table,
+            $this->pool,
             $this->serializer,
             $singleFlight,
             $this->metrics,
@@ -338,5 +345,34 @@ class MemoryCacheManagerTest extends TestCase
             ->willReturn(true);
 
         $this->manager->delete($longKey);
+    }
+
+    public function testGetWithChannel(): void
+    {
+        $goodsTable = $this->createMock(LocalCacheTableInterface::class);
+        $goodsTable->method('get')->willReturn([
+            'value'      => 'goods_data',
+            'expire_at'  => time() + 3600,
+            'created_at' => time(),
+        ]);
+        $goodsTable->method('evictionPolicy')->willReturn('lru');
+
+        $this->serializer->method('unserialize')->willReturn([
+            'ok'   => true,
+            'value' => ['product' => 'test'],
+        ]);
+
+        $pool = $this->createMock(LocalCacheTablePool::class);
+        $pool->method('get')->willReturnCallback(
+            fn (string $channel) => $channel === 'goods' ? $goodsTable : $this->table
+        );
+
+        $ref = new \ReflectionProperty($this->manager, 'pool');
+        $ref->setAccessible(true);
+        $ref->setValue($this->manager, $pool);
+
+        $result = $this->manager->get('test_key', 'goods');
+        $this->assertTrue($result['hit']);
+        $this->assertSame(['product' => 'test'], $result['value']);
     }
 }

@@ -6,6 +6,8 @@ namespace Groupbuy\HyperfMemoryCache\Cache\Memory;
 
 interface LocalCacheTableInterface
 {
+    public function channel(): string;
+
     public function get(string $key): ?array;
 
     public function set(string $key, string $payload, int $expireAt): bool;

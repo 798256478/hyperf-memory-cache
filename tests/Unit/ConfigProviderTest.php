@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Groupbuy\HyperfMemoryCache\Tests\Unit;
 
+use Groupbuy\HyperfMemoryCache\Cache\Memory\LocalCacheTablePool;
 use Groupbuy\HyperfMemoryCache\ConfigProvider;
 use Groupbuy\HyperfMemoryCache\Command\MemoryCacheStatsCommand;
 use Groupbuy\HyperfMemoryCache\Listener\MemoryCacheTableInitializer;
@@ -49,5 +50,11 @@ class ConfigProviderTest extends TestCase
         $this->assertArrayHasKey('source', $publishItem);
         $this->assertArrayHasKey('destination', $publishItem);
         $this->assertSame('config/autoload/memory_cache.php', $publishItem['destination']);
+    }
+
+    public function testLocalCacheTablePoolRegistered(): void
+    {
+        $this->assertArrayHasKey('dependencies', $this->config);
+        $this->assertArrayHasKey(LocalCacheTablePool::class, $this->config['dependencies']);
     }
 }
