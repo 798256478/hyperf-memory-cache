@@ -13,7 +13,7 @@ return [
             'table_size' => (int) env('MEMORY_CACHE_TABLE_SIZE', 16384),
             'max_value_bytes' => 3500,
             'conflict_proportion' => 0.2,
-            // 'eviction_policy' => 'lru', // 表级淘汰策略，不设置则使用全局 eviction_policy
+            // 'eviction_policy' => 'lru', // 表级淘汰策略(lru=真LRU, lru_sampled=概率近似LRU, lru_lazy=纯读不写)，不设置则使用全局 eviction_policy
             // 'eviction_batch_size' => 8, // 表级淘汰批量大小，不设置则使用全局 eviction_batch_size
         ],
         'goods' => [
@@ -39,7 +39,7 @@ return [
 
     'serializer' => env('MEMORY_CACHE_SERIALIZER', 'auto'),
 
-    'eviction_policy' => env('MEMORY_CACHE_EVICTION_POLICY', 'lru'), // 淘汰策略：lru=概率更新访问时间戳(约10%命中率时更新), lru_lazy=纯读不写(按写入时间淘汰, FIFO语义)
+    'eviction_policy' => env('MEMORY_CACHE_EVICTION_POLICY', 'lru'), // 淘汰策略：lru=真LRU(每次命中更新访问时间戳), lru_sampled=概率近似LRU(约10%命中时更新), lru_lazy=纯读不写(按写入时间淘汰, FIFO语义)
 
     'eviction_batch_size' => (int) env('MEMORY_CACHE_EVICTION_BATCH_SIZE', 8),
 

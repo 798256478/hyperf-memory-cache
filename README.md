@@ -196,10 +196,12 @@ public function getShopConfig(string $sid, string $column): array { ... }
 
 | 策略 | `eviction_policy` 值 | get 时写操作 | 淘汰排序依据 | 适用场景 |
 |------|----------------------|-------------|-------------|---------|
-| **概率 LRU** | `lru` | 约 10% 概率只更新 `last_access_at` 列（4 字节） | `last_access_at` | 通用场景，近似 LRU，写开销低 |
+| **真 LRU** | `lru` | 每次命中更新 `last_access_at` 列（4 字节） | `last_access_at` | 需要 LRU 精度，写开销可接受 |
+| **概率近似 LRU** | `lru_sampled` | 约 10% 概率更新 `last_access_at` 列（4 字节） | `last_access_at` | 通用场景，近似 LRU，写开销低 |
 | **惰性淘汰** | `lru_lazy` | 无（纯读） | `created_at`（FIFO 语义） | 读密集、表容量充裕、可接受 FIFO |
 
-- `lru`：每次 get 命中时，约 10 次命中才写 1 次 `last_access_at`（只写 4 字节 int 列，不重写整行），兼顾 LRU 精度与读性能
+- `lru`：每次 get 命中都更新 `last_access_at`（只写 4 字节 int 列，不重写整行），淘汰精度最高
+- `lru_sampled`：每次 get 命中时，约 10 次命中才写 1 次 `last_access_at`，兼顾 LRU 精度与读性能
 - `lru_lazy`：get 完全不写共享内存，读性能最优；淘汰时按写入时间排序（先入先出），适合缓存写入后访问频率均匀的场景
 
 ### 容量估算

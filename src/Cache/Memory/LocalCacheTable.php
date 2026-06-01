@@ -62,7 +62,9 @@ final class LocalCacheTable implements LocalCacheTableInterface
             return null;
         }
 
-        if ($this->evictionPolicy === 'lru' && random_int(1, 10) === 1) {
+        if ($this->evictionPolicy === 'lru') {
+            $table->set($key, ['last_access_at' => $now]);
+        } elseif ($this->evictionPolicy === 'lru_sampled' && random_int(1, 10) === 1) {
             $table->set($key, ['last_access_at' => $now]);
         }
 
@@ -92,7 +94,7 @@ final class LocalCacheTable implements LocalCacheTableInterface
             'last_access_at' => $now,
         ]);
 
-        if (! $ok && ($this->evictionPolicy === 'lru' || $this->evictionPolicy === 'lru_lazy')) {
+        if (! $ok && in_array($this->evictionPolicy, ['lru', 'lru_sampled', 'lru_lazy'], true)) {
             $this->evictLru($table, $now);
 
             $ok = $table->set($key, [
