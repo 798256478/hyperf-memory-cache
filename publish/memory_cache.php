@@ -35,7 +35,7 @@ return [
 
     'serializer' => env('MEMORY_CACHE_SERIALIZER', 'auto'),
 
-    'eviction_policy' => env('MEMORY_CACHE_EVICTION_POLICY', 'lru'),
+    'eviction_policy' => env('MEMORY_CACHE_EVICTION_POLICY', 'lru'), // 淘汰策略：lru=概率更新访问时间戳(约10%命中率时更新), lru_lazy=纯读不写(按写入时间淘汰, FIFO语义)
 
     'eviction_batch_size' => (int) env('MEMORY_CACHE_EVICTION_BATCH_SIZE', 8),
 

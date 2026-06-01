@@ -26,7 +26,7 @@ class MemoryCacheManagerTest extends TestCase
 
     private CacheValueSerializerInterface&MockObject $serializer;
 
-    private LocalCacheTablePool&MockObject $pool;
+    private LocalCacheTablePool $pool;
 
     protected function setUp(): void
     {
@@ -34,29 +34,25 @@ class MemoryCacheManagerTest extends TestCase
         $this->table = $this->createMock(LocalCacheTableInterface::class);
         $this->serializer = $this->createMock(CacheValueSerializerInterface::class);
 
-        $this->pool = $this->createMock(LocalCacheTablePool::class);
-        $this->pool->method('get')->willReturn($this->table);
-        $this->pool->method('channels')->willReturn(['default']);
-
-        /** @var ConfigInterface&MockObject $config */
         $config = $this->createMock(ConfigInterface::class);
         $config->method('get')->willReturnMap([
+            ['memory_cache.enabled', true, true],
             ['memory_cache.default_ttl', 60, 60],
             ['memory_cache.ttl_jitter', 5, 0],
             ['memory_cache.max_key_length', 60, 60],
         ]);
 
-        /** @var LoggerFactory&MockObject $loggerFactory */
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn($this->createMock(LoggerInterface::class));
 
-        /** @var SingleFlightManagerInterface&MockObject $singleFlight */
         $singleFlight = $this->createMock(SingleFlightManagerInterface::class);
         $singleFlight->method('do')->willReturnCallback(
             fn (string $key, callable $cb, bool $enabled) => $cb()
         );
 
         $this->table->method('evictionPolicy')->willReturn('lru');
+
+        $this->pool = $this->createPoolStub(['default' => $this->table]);
 
         $this->manager = new MemoryCacheManager(
             $this->pool,
@@ -66,6 +62,36 @@ class MemoryCacheManagerTest extends TestCase
             $config,
             $loggerFactory,
         );
+    }
+
+    private function createPoolStub(array $tableMap): LocalCacheTablePool
+    {
+        return new class($tableMap) extends LocalCacheTablePool {
+            /** @param array<string, LocalCacheTableInterface> $tableMap */
+            public function __construct(private readonly array $tableMap)
+            {
+            }
+            public function get(string $channel = 'default'): LocalCacheTableInterface
+            {
+                return $this->tableMap[$channel] ?? throw new \RuntimeException("Unknown channel: {$channel}");
+            }
+            public function channels(): array
+            {
+                return array_keys($this->tableMap);
+            }
+            public function has(string $channel): bool
+            {
+                return isset($this->tableMap[$channel]);
+            }
+            public function all(): array
+            {
+                return $this->tableMap;
+            }
+            public function clearAll(): int
+            {
+                return 0;
+            }
+        };
     }
 
     public function testGetHit(): void
@@ -362,16 +388,34 @@ class MemoryCacheManagerTest extends TestCase
             'value' => ['product' => 'test'],
         ]);
 
-        $pool = $this->createMock(LocalCacheTablePool::class);
-        $pool->method('get')->willReturnCallback(
-            fn (string $channel) => $channel === 'goods' ? $goodsTable : $this->table
+        $pool = $this->createPoolStub(['default' => $this->table, 'goods' => $goodsTable]);
+
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('get')->willReturnMap([
+            ['memory_cache.enabled', true, true],
+            ['memory_cache.default_ttl', 60, 60],
+            ['memory_cache.ttl_jitter', 5, 0],
+            ['memory_cache.max_key_length', 60, 60],
+        ]);
+
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn($this->createMock(LoggerInterface::class));
+
+        $singleFlight = $this->createMock(SingleFlightManagerInterface::class);
+        $singleFlight->method('do')->willReturnCallback(
+            fn (string $key, callable $cb, bool $enabled) => $cb()
         );
 
-        $ref = new \ReflectionProperty($this->manager, 'pool');
-        $ref->setAccessible(true);
-        $ref->setValue($this->manager, $pool);
+        $manager = new MemoryCacheManager(
+            $pool,
+            $this->serializer,
+            $singleFlight,
+            $this->metrics,
+            $config,
+            $loggerFactory,
+        );
 
-        $result = $this->manager->get('test_key', 'goods');
+        $result = $manager->get('test_key', 'goods');
         $this->assertTrue($result['hit']);
         $this->assertSame(['product' => 'test'], $result['value']);
     }

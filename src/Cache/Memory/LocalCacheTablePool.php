@@ -6,11 +6,11 @@ namespace Groupbuy\HyperfMemoryCache\Cache\Memory;
 
 use Hyperf\Contract\ConfigInterface;
 
-final class LocalCacheTablePool
+class LocalCacheTablePool
 {
     private readonly ConfigInterface $config;
 
-    /** @var array<string, LocalCacheTable> */
+    /** @var array<string, LocalCacheTableInterface> */
     private array $tables = [];
 
     public function __construct(ConfigInterface $config)
@@ -18,7 +18,7 @@ final class LocalCacheTablePool
         $this->config = $config;
     }
 
-    public function get(string $channel = 'default'): LocalCacheTable
+    public function get(string $channel = 'default'): LocalCacheTableInterface
     {
         if (! isset($this->tables[$channel])) {
             $this->tables[$channel] = new LocalCacheTable($this->config, $channel);
@@ -41,7 +41,7 @@ final class LocalCacheTablePool
     }
 
     /**
-     * @return array<string, LocalCacheTable>
+     * @return array<string, LocalCacheTableInterface>
      */
     public function all(): array
     {

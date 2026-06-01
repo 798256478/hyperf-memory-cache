@@ -175,6 +175,8 @@ public function getShopConfig(string $sid, string $column): array { ... }
 | `singleflight.enabled` | `true` | 单飞防击穿开关 |
 | `singleflight.wait_timeout` | `3.0` | 等待 leader 的协程超时（秒） |
 | `serializer` | `auto` | 序列化器：`auto`/`php`/`igbinary`（`.env: MEMORY_CACHE_SERIALIZER`） |
+| `eviction_policy` | `lru` | 淘汰策略（`.env: MEMORY_CACHE_EVICTION_POLICY`）；见下方说明 |
+| `eviction_batch_size` | `8` | 淘汰时一次删除的行数 |
 | `log_value` | `false` | 是否在 debug 日志中输出 value（默认关闭防敏感数据泄露） |
 
 ### 多表配置（`tables`）
@@ -187,6 +189,16 @@ public function getShopConfig(string $sid, string $column): array { ... }
 | `table_size` | `16384` | Table 行数 |
 | `max_value_bytes` | `3500` | 单值序列化后字节数上限；超过不缓存 |
 | `conflict_proportion` | `0.2` | Table 哈希冲突比例 |
+
+### 淘汰策略
+
+| 策略 | `eviction_policy` 值 | get 时写操作 | 淘汰排序依据 | 适用场景 |
+|------|----------------------|-------------|-------------|---------|
+| **概率 LRU** | `lru` | 约 10% 概率只更新 `last_access_at` 列（4 字节） | `last_access_at` | 通用场景，近似 LRU，写开销低 |
+| **惰性淘汰** | `lru_lazy` | 无（纯读） | `created_at`（FIFO 语义） | 读密集、表容量充裕、可接受 FIFO |
+
+- `lru`：每次 get 命中时，约 10 次命中才写 1 次 `last_access_at`（只写 4 字节 int 列，不重写整行），兼顾 LRU 精度与读性能
+- `lru_lazy`：get 完全不写共享内存，读性能最优；淘汰时按写入时间排序（先入先出），适合缓存写入后访问频率均匀的场景
 
 ### 容量估算
 

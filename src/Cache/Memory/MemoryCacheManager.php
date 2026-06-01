@@ -96,7 +96,7 @@ final class MemoryCacheManager
         if ($ok) {
             $this->metrics->recordSet();
         } else {
-            if ($table->evictionPolicy() === 'lru') {
+            if ($table->evictionPolicy() === 'lru' || $table->evictionPolicy() === 'lru_lazy') {
                 $this->metrics->recordEvictsLru(1);
             }
             $this->metrics->recordError();

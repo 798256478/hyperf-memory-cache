@@ -60,13 +60,8 @@ final class LocalCacheTable implements LocalCacheTableInterface
             return null;
         }
 
-        if ($this->evictionPolicy === 'lru') {
-            $table->set($key, [
-                'value'          => (string) ($row['value'] ?? ''),
-                'expire_at'      => (int) ($row['expire_at'] ?? 0),
-                'created_at'     => (int) ($row['created_at'] ?? 0),
-                'last_access_at' => $now,
-            ]);
+        if ($this->evictionPolicy === 'lru' && random_int(1, 10) === 1) {
+            $table->set($key, ['last_access_at' => $now]);
         }
 
         return [
@@ -95,7 +90,7 @@ final class LocalCacheTable implements LocalCacheTableInterface
             'last_access_at' => $now,
         ]);
 
-        if (! $ok && $this->evictionPolicy === 'lru') {
+        if (! $ok && ($this->evictionPolicy === 'lru' || $this->evictionPolicy === 'lru_lazy')) {
             $this->evictLru($table, $now);
 
             $ok = $table->set($key, [
@@ -168,6 +163,7 @@ final class LocalCacheTable implements LocalCacheTableInterface
             $candidates[] = [
                 'key'            => (string) $key,
                 'last_access_at' => (int) ($row['last_access_at'] ?? 0),
+                'created_at'     => (int) ($row['created_at'] ?? 0),
             ];
         }
 
@@ -180,7 +176,11 @@ final class LocalCacheTable implements LocalCacheTableInterface
             return $evicted;
         }
 
-        usort($candidates, static fn (array $a, array $b): int => $a['last_access_at'] <=> $b['last_access_at']);
+        if ($this->evictionPolicy === 'lru_lazy') {
+            usort($candidates, static fn (array $a, array $b): int => $a['created_at'] <=> $b['created_at']);
+        } else {
+            usort($candidates, static fn (array $a, array $b): int => $a['last_access_at'] <=> $b['last_access_at']);
+        }
 
         $batch = min($this->evictionBatchSize, count($candidates));
         for ($i = 0; $i < $batch; ++$i) {
