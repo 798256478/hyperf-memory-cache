@@ -189,6 +189,8 @@ public function getShopConfig(string $sid, string $column): array { ... }
 | `table_size` | `16384` | Table 行数 |
 | `max_value_bytes` | `3500` | 单值序列化后字节数上限；超过不缓存 |
 | `conflict_proportion` | `0.2` | Table 哈希冲突比例 |
+| `eviction_policy` | 全局值 | 表级淘汰策略，不设置则使用全局 `eviction_policy` |
+| `eviction_batch_size` | 全局值 | 表级淘汰批量大小，不设置则使用全局 `eviction_batch_size` |
 
 ### 淘汰策略
 

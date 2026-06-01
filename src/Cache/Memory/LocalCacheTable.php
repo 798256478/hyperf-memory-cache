@@ -32,9 +32,11 @@ final class LocalCacheTable implements LocalCacheTableInterface
         $this->maxValueBytes = max(64, (int) ($tableConfig['max_value_bytes']
             ?? $config->get('memory_cache.max_value_bytes', 3500)));
 
-        $this->evictionPolicy = (string) $config->get('memory_cache.eviction_policy', 'lru');
+        $this->evictionPolicy = (string) ($tableConfig['eviction_policy']
+            ?? $config->get('memory_cache.eviction_policy', 'lru'));
 
-        $this->evictionBatchSize = max(1, (int) $config->get('memory_cache.eviction_batch_size', 8));
+        $this->evictionBatchSize = max(1, (int) ($tableConfig['eviction_batch_size']
+            ?? $config->get('memory_cache.eviction_batch_size', 8)));
     }
 
     public function channel(): string
